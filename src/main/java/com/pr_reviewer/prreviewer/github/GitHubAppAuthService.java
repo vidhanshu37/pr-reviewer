@@ -54,6 +54,7 @@ public class GitHubAppAuthService {
         }
     }
 
+    // need pkcs8 format
     private PrivateKey loadPrivateKey(String path) throws Exception {
         String pem = Files.readString(Path.of(path))
                 .replace("-----BEGIN RSA PRIVATE KEY-----", "")
