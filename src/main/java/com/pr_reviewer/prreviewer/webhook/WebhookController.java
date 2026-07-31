@@ -28,7 +28,7 @@ public class WebhookController {
         }
 
         if (!"pull_request".equals(eventType)) {
-            return ResponseEntity.ok("Event  ignored");
+            return ResponseEntity.ok("Event ignored");
         }
 
         try {
