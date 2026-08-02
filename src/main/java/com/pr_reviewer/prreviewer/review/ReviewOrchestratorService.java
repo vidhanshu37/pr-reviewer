@@ -1,12 +1,16 @@
 package com.pr_reviewer.prreviewer.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.pr_reviewer.prreviewer.dto.FileDiff;
 import com.pr_reviewer.prreviewer.github.GitHubClientService;
 import com.pr_reviewer.prreviewer.llm.LLMReviewService;
+import com.pr_reviewer.prreviewer.rule.JavaAstService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -15,6 +19,10 @@ public class ReviewOrchestratorService {
 
     private final GitHubClientService gitHubClientService;
     private final LLMReviewService llmReviewService;
+    private final DiffFilterService diffFilterService;
+    private final DiffChunkingService diffChunkingService;
+    private final ReviewCacheService reviewCacheService;
+    private final JavaAstService    javaAstService;
 
     @Async("reviewTaskExecutor")
     public void processPullRequestAsync(JsonNode webhookPayload) {
@@ -24,9 +32,34 @@ public class ReviewOrchestratorService {
         long installationId = webhookPayload.at("/installation/id").asLong();
 
         try {
-            String diff = gitHubClientService.fetchPullRequestDiff(owner, repo, prNumber, installationId);
-            String summary = llmReviewService.generateSummary(diff);
+            List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId);
+            List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles);
 
+            // fetch full file content for relevant Java files and log their structure
+            for (FileDiff file : relevantFiles) {
+                if (file.getFilename().endsWith(".java")) {
+                    String headSha = webhookPayload.at("/pull_request/head/sha").asText();
+                    String fullContent = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);
+                    javaAstService.logFileStructure(file.getFilename(), fullContent);
+                }
+            }
+
+            if (relevantFiles.isEmpty()) {
+                log.info("No relevant files to review for PR #{} on {}/{} — skipping LLM call", prNumber, owner, repo);
+                return;
+            }
+
+            String diff = diffChunkingService.buildDiffText(relevantFiles);
+            String diffHash = reviewCacheService.hashDiff(diff);
+
+            String summary = reviewCacheService.getCachedSummary(diffHash);
+
+            if(summary == null) {
+                summary = llmReviewService.generateSummary(diff);
+                reviewCacheService.putSummary(diffHash, summary);
+            }
+
+//            this will send the summary as a comment to the PR
             gitHubClientService.postComment(owner, repo, prNumber, summary, installationId);
             log.info("Review posted for PR #{} on {}/{}", prNumber, owner, repo);
         } catch (Exception e) {
