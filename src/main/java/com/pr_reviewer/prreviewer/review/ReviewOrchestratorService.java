@@ -5,8 +5,10 @@ import com.pr_reviewer.prreviewer.dto.FileDiff;
 import com.pr_reviewer.prreviewer.github.GitHubClientService;
 import com.pr_reviewer.prreviewer.llm.LLMReviewService;
 import com.pr_reviewer.prreviewer.rag.CodeChunkingService;
+import com.pr_reviewer.prreviewer.rag.CodebaseIndexingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.document.Document;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +25,7 @@ public class ReviewOrchestratorService {
     private final DiffChunkingService diffChunkingService;
     private final ReviewCacheService reviewCacheService;
     private final CodeChunkingService codeChunkingService;
+    private final CodebaseIndexingService codebaseIndexingService;
 //    private final TreeSitterParseService treeSitterParseService;
 
     @Async("reviewTaskExecutor")
@@ -41,9 +44,18 @@ public class ReviewOrchestratorService {
             List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles);
 
             for (FileDiff file : relevantFiles) {
+                if ("removed".equals(file.getStatus())) {
+                    log.info("Skipping content fetch for deleted file: {}", file.getFilename());
+                    continue;
+                }
                 String headSha = webhookPayload.at("/pull_request/head/sha").asText();
-                String fullContent = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);
-                codeChunkingService.chunkFile(file.getFilename(), fullContent);
+                try {
+                    String fullContent = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);
+                    List<Document> chunks = codeChunkingService.chunkFile(file.getFilename(), fullContent);
+                    codebaseIndexingService.indexChunks(chunks);
+                } catch (Exception e) {
+                    log.warn("Skipping indexing for {} - failed to fetch content: {}", file.getFilename(), e.getMessage());
+                }
             }
 
             if (relevantFiles.isEmpty()) {
