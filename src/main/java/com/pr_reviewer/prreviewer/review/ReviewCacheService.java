@@ -54,4 +54,24 @@ public class ReviewCacheService {
         redisTemplate.opsForValue().set(key, summary, CACHE_TTL);
         log.info("Cached summary for key: {} and TTL: {}", key, CACHE_TTL.toDays());
     }
+
+    private static final String DELIVERY_KEY_PREFIX = "pr-review:delivery:";
+    private static final Duration DELIVERY_TTL = Duration.ofHours(24);
+
+    /**
+     * Returns true only the first time a given deliveryId is seen (within the TTL window),
+     * so redelivered webhooks don't trigger duplicate reviews/comments.
+     */
+    public boolean markDeliveryProcessed(String deliveryId) {
+        if (deliveryId == null) {
+            return true;
+        }
+        String key = DELIVERY_KEY_PREFIX + deliveryId;
+        Boolean wasSet = redisTemplate.opsForValue().setIfAbsent(key, "1", DELIVERY_TTL);
+        boolean isNew = Boolean.TRUE.equals(wasSet);
+        if (!isNew) {
+            log.info("Delivery {} already processed - skipping duplicate", deliveryId);
+        }
+        return isNew;
+    }
 }
