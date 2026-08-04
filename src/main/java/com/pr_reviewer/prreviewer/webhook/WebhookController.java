@@ -23,10 +23,8 @@ public class WebhookController {
     public ResponseEntity<String> handleWebhook(
             @RequestBody String payload,
             @RequestHeader("X-Hub-Signature-256") String signature,
-            @RequestHeader("X-GitHub-Event") String eventType) {
-
-        log.info("Received non-pull_request event: {}", eventType);
-        log.info("payload :::: {}", payload);
+            @RequestHeader("X-GitHub-Event") String eventType,
+            @RequestHeader(value = "X-GitHub-Delivery", required = false) String deliveryId) {
 
         if (!verifier.isValid(payload, signature)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid signature");
@@ -39,9 +37,10 @@ public class WebhookController {
         try {
             JsonNode json = objectMapper.readTree(payload);
             String action = json.get("action").asText();
+            log.info("Received pull_request event, action={}, deliveryId={}", action, deliveryId);
 
             if ("opened".equals(action) || "synchronize".equals(action)) {
-                reviewOrchestratorService.processPullRequestAsync(json);
+                reviewOrchestratorService.processPullRequestAsync(json, deliveryId);
             }
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Malformed payload");

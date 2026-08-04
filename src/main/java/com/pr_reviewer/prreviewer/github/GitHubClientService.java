@@ -1,6 +1,5 @@
 package com.pr_reviewer.prreviewer.github;
 
-import com.github.javaparser.ast.visitor.ObjectIdentityEqualsVisitor;
 import com.pr_reviewer.prreviewer.dto.FileDiff;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

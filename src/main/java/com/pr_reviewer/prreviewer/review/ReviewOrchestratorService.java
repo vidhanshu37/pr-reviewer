@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.pr_reviewer.prreviewer.dto.FileDiff;
 import com.pr_reviewer.prreviewer.github.GitHubClientService;
 import com.pr_reviewer.prreviewer.llm.LLMReviewService;
-import com.pr_reviewer.prreviewer.rule.JavaAstService;
+import com.pr_reviewer.prreviewer.rag.CodeChunkingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -22,26 +22,28 @@ public class ReviewOrchestratorService {
     private final DiffFilterService diffFilterService;
     private final DiffChunkingService diffChunkingService;
     private final ReviewCacheService reviewCacheService;
-    private final JavaAstService    javaAstService;
+    private final CodeChunkingService codeChunkingService;
+//    private final TreeSitterParseService treeSitterParseService;
 
     @Async("reviewTaskExecutor")
-    public void processPullRequestAsync(JsonNode webhookPayload) {
+    public void processPullRequestAsync(JsonNode webhookPayload, String deliveryId) {
         String owner = webhookPayload.at("/repository/owner/login").asText();
         String repo = webhookPayload.at("/repository/name").asText();
         int prNumber = webhookPayload.at("/pull_request/number").asInt();
         long installationId = webhookPayload.at("/installation/id").asLong();
 
+        if(!reviewCacheService.markDeliveryProcessed(deliveryId)) {
+            return;
+        }
+
         try {
             List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId);
             List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles);
 
-            // fetch full file content for relevant Java files and log their structure
             for (FileDiff file : relevantFiles) {
-                if (file.getFilename().endsWith(".java")) {
-                    String headSha = webhookPayload.at("/pull_request/head/sha").asText();
-                    String fullContent = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);
-                    javaAstService.logFileStructure(file.getFilename(), fullContent);
-                }
+                String headSha = webhookPayload.at("/pull_request/head/sha").asText();
+                String fullContent = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);
+                codeChunkingService.chunkFile(file.getFilename(), fullContent);
             }
 
             if (relevantFiles.isEmpty()) {
