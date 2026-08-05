@@ -19,6 +19,7 @@ public class RetrievalService {
     private static final int TOP_K = 5;
     private final VectorStore vectorStore;
 
+    // this test comment
     public List<Document> retrieveRelevantChunks(String diffText, Set<String> excludeFilenames) {
         SearchRequest request = SearchRequest.builder()
                 .query(diffText)
@@ -30,7 +31,7 @@ public class RetrievalService {
                 .limit(TOP_K)
                 .collect(Collectors.toList());
 
-        log.info("Retrieved {} relevant chunks for diff (topK={}, excluded {} in-PR files)",
+        log.info("Retrieved {} relevant chunks for difference (topK={}, excluded {} in-PR files)",
                 results.size(), TOP_K, excludeFilenames.size());
         results.forEach(doc -> log.info("  - {} (score={}): {}",
                 doc.getMetadata().get("filename"), doc.getScore(),
