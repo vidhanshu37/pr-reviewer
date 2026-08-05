@@ -14,6 +14,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -67,7 +69,11 @@ public class ReviewOrchestratorService {
             String diff = diffChunkingService.buildDiffText(relevantFiles);
             String diffHash = reviewCacheService.hashDiff(diff);
 
-            List<Document> retrievedChunks = retrievalService.retrieveRelevantChunks(diff);
+            Set<String> fileInThisPr = relevantFiles.stream()
+                    .map(FileDiff::getFilename)
+                    .collect(Collectors.toSet());
+
+            List<Document> retrievedChunks = retrievalService.retrieveRelevantChunks(diff, fileInThisPr);
 
             String summary = reviewCacheService.getCachedSummary(diffHash);
 
