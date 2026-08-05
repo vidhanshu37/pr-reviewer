@@ -6,6 +6,7 @@ import com.pr_reviewer.prreviewer.github.GitHubClientService;
 import com.pr_reviewer.prreviewer.llm.LLMReviewService;
 import com.pr_reviewer.prreviewer.rag.CodeChunkingService;
 import com.pr_reviewer.prreviewer.rag.CodebaseIndexingService;
+import com.pr_reviewer.prreviewer.rag.RetrievalService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -26,7 +27,7 @@ public class ReviewOrchestratorService {
     private final ReviewCacheService reviewCacheService;
     private final CodeChunkingService codeChunkingService;
     private final CodebaseIndexingService codebaseIndexingService;
-//    private final TreeSitterParseService treeSitterParseService;
+    private final RetrievalService retrievalService;
 
     @Async("reviewTaskExecutor")
     public void processPullRequestAsync(JsonNode webhookPayload, String deliveryId) {
@@ -65,6 +66,8 @@ public class ReviewOrchestratorService {
 
             String diff = diffChunkingService.buildDiffText(relevantFiles);
             String diffHash = reviewCacheService.hashDiff(diff);
+
+            List<Document> retrievedChunks = retrievalService.retrieveRelevantChunks(diff);
 
             String summary = reviewCacheService.getCachedSummary(diffHash);
 
