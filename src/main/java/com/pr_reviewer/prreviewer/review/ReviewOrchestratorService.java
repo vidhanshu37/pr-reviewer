@@ -46,6 +46,8 @@ public class ReviewOrchestratorService {
             List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId);
             List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles);
 
+            String repoFullName = owner + "/" + repo;
+
             for (FileDiff file : relevantFiles) {
                 if ("removed".equals(file.getStatus())) {
                     log.info("Skipping content fetch for deleted file: {}", file.getFilename());
@@ -54,7 +56,7 @@ public class ReviewOrchestratorService {
                 String headSha = webhookPayload.at("/pull_request/head/sha").asText();
                 try {
                     String fullContent = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);
-                    List<Document> chunks = codeChunkingService.chunkFile(file.getFilename(), fullContent);
+                    List<Document> chunks = codeChunkingService.chunkFile(repoFullName, file.getFilename(), fullContent);
                     codebaseIndexingService.indexChunks(chunks);
                 } catch (Exception e) {
                     log.warn("Skipping indexing for {} - failed to fetch content: {}", file.getFilename(), e.getMessage());
@@ -73,7 +75,8 @@ public class ReviewOrchestratorService {
                     .map(FileDiff::getFilename)
                     .collect(Collectors.toSet());
 
-            List<Document> retrievedChunks = retrievalService.retrieveRelevantChunks(diff, fileInThisPr);
+            List<Document> retrievedChunks = retrievalService.retrieveRelevantChunks(diff, fileInThisPr, repoFullName);
+            log.info("vidhanshu ::: ", retrievedChunks.stream().findFirst().toString());
 
             String summary = reviewCacheService.getCachedSummary(diffHash);
 
