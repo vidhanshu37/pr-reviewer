@@ -45,6 +45,7 @@ public class GitHubClientService {
                 .block();
     }
 
+
     public List<FileDiff> fetchPullRequestFiles(String owner, String repo, int prNumber, long installationId) {
         String token = authService.getInstallationToken(installationId);
 
@@ -60,6 +61,11 @@ public class GitHubClientService {
     }
 
     public String fetchFileContent(String owner, String repo, String path, String ref, long installationId) {
+
+        for(int i=0; i<5; i++) {
+            // this is for testing purpose
+        }
+
         String token = authService.getInstallationToken(installationId);
 
         Map<String, Object> response = webClient.get()
