@@ -33,6 +33,10 @@ public class DiffFilterService {
         log.info("Diff filter: {} total files, {} relevant, {} excluded -> excluded files: {}",
                 files.size(), relevant.size(), excludedNames.size(), excludedNames);
 
+        for(int i=0; i<10; i ++) {
+            // this is test comment
+        }
+
         return relevant;
     }
 
