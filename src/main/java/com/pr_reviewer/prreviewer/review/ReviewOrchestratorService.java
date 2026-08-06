@@ -76,7 +76,8 @@ public class ReviewOrchestratorService {
                     .collect(Collectors.toSet());
 
             List<Document> retrievedChunks = retrievalService.retrieveRelevantChunks(diff, fileInThisPr, repoFullName);
-            log.info("vidhanshu ::: ", retrievedChunks.stream().findFirst().toString());
+            log.info("vidhanshu ::: first retrieved chunk = {}",
+                    retrievedChunks.isEmpty() ? "NONE" : retrievedChunks.get(0));
 
             String summary = reviewCacheService.getCachedSummary(diffHash);
 
