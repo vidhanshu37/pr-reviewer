@@ -19,11 +19,11 @@ public class RetrievalService {
     private static final int TOP_K = 5;
     private final VectorStore vectorStore;
 
-    // this test comment
-    public List<Document> retrieveRelevantChunks(String diffText, Set<String> excludeFilenames) {
+    public List<Document> retrieveRelevantChunks(String diffText, Set<String> excludeFilenames, String repoFullName) {
         SearchRequest request = SearchRequest.builder()
                 .query(diffText)
                 .topK(TOP_K + excludeFilenames.size()) // to remove current PR's file
+                .filterExpression("repo == '" + repoFullName + "'")
                 .build();
 
         List<Document> results = vectorStore.similaritySearch(request).stream()
@@ -31,10 +31,10 @@ public class RetrievalService {
                 .limit(TOP_K)
                 .collect(Collectors.toList());
 
-        log.info("Retrieved {} relevant chunks for difference (topK={}, excluded {} in-PR files)",
-                results.size(), TOP_K, excludeFilenames.size());
-        results.forEach(doc -> log.info("  - {} (score={}): {}",
-                doc.getMetadata().get("filename"), doc.getScore(),
+        results.forEach(doc -> log.info("  - [{}] {} (score={}): {}",
+                doc.getMetadata().get("repo"),
+                doc.getMetadata().get("filename"),
+                doc.getScore(),
                 doc.getText().substring(0, Math.min(80, doc.getText().length())).replace("\n", " ")));
 
         return results;
