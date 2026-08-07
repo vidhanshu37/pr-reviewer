@@ -49,6 +49,10 @@ public class ReviewCacheService {
         return cached;
     }
 
+    public void testingPurpose() {
+        // this is for testing purpose !
+    }
+
     public void putSummary(String diffHash, String summary) {
         String key = CACHE_KEY_PREFIX + diffHash;
         redisTemplate.opsForValue().set(key, summary, CACHE_TTL);
