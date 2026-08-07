@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -26,6 +25,7 @@ public class RetrievalService {
             filter.append(" && filename != '").append(filename).append("'");
         }
 
+        // this is test msg
         SearchRequest request = SearchRequest.builder()
                 .query(diffText)
                 .topK(TOP_K + excludeFilenames.size()) // to remove current PR's file
