@@ -27,7 +27,7 @@ public class LLMReviewService {
 
     public String generateSummary(String diff) {
         String prompt = """
-                You are reviewing a GitHub pull request. Below is the diff of changes.
+                You are senior software engineer and reviewing a GitHub pull request. Below is the diff of changes.
                 Provide a concise summary covering:
                 1. What changed (high level)
                 2. Potential risk areas or bugs
