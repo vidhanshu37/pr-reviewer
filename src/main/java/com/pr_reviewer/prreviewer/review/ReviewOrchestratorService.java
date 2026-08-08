@@ -57,7 +57,7 @@ public class ReviewOrchestratorService {
                 try {
                     String fullContent = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);
                     List<Document> chunks = codeChunkingService.chunkFile(repoFullName, file.getFilename(), fullContent);
-                    codebaseIndexingService.indexChunks(chunks);
+                    codebaseIndexingService.indexChunks(repoFullName, file.getFilename(), chunks);
                 } catch (Exception e) {
                     log.warn("Skipping indexing for {} - failed to fetch content: {}", file.getFilename(), e.getMessage());
                 }
@@ -84,7 +84,8 @@ public class ReviewOrchestratorService {
             String summary = reviewCacheService.getCachedSummary(diffHash);
 
             if(summary == null) {
-                summary = llmReviewService.generateSummary(diff);
+                summary = llmReviewService.generateSummary(diff, retrievedChunks);
+
                 reviewCacheService.putSummary(diffHash, summary);
             }
 
