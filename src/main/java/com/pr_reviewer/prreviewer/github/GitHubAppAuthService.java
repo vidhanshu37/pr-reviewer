@@ -2,6 +2,7 @@ package com.pr_reviewer.prreviewer.github;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.jsonwebtoken.Jwts;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 
+@Slf4j
 @Service
 public class GitHubAppAuthService {
     @Value("${github.app.id}")
@@ -28,15 +30,20 @@ public class GitHubAppAuthService {
             .build();
 
     public String getInstallationToken(long installationId) {
-        String jwt = generateAppJwt();
-        JsonNode response = webClient.post()
-                .uri("/app/installations/{id}/access_tokens", installationId)
-                .header("Authorization", "Bearer " + jwt)
-                .header("Accept", "application/vnd.github.v3+json")
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block();
-        return response.get("token").asText();
+        try {
+            String jwt = generateAppJwt();
+            JsonNode response = webClient.post()
+                    .uri("/app/installations/{id}/access_tokens", installationId)
+                    .header("Authorization", "Bearer " + jwt)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .block();
+            return response.get("token").asText();
+        } catch (Exception e) {
+            log.error("Failed to get installation token for installationId={}", installationId, e);
+            throw new RuntimeException("Failed to get installation token", e);
+        }
     }
 
     public String generateAppJwt() {
