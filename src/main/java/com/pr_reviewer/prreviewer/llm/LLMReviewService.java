@@ -29,30 +29,34 @@ public class LLMReviewService {
                 .build();
     }
 
-    public String generateSummary(String diff, List<Document> retrievedChunks) {
+    public String generateSummary(String compressedDiff, List<Document> retrievedChunks) {
         String contextBlock = buildContextBlock(retrievedChunks);
 
         String prompt = """
-                You are a senior software engineer reviewing a GitHub pull request.
-                
-                Below is relevant existing code from this repository, given as context.
-                
-                %s
-                
-                Review the diff below. Your response MUST include a section titled
-                "Codebase Consistency" where you explicitly state whether the change
-                follows patterns seen in the context above, or explain why the context
-                wasn't relevant to this specific change. Do not skip this section.
-                
-                Also cover:
-                1. What changed (high level)
-                2. Potential risk areas or bugs
-                
-                Keep it under 220 words, use markdown formatting.
-                
-                DIFF:
-                %s
-                """.formatted(contextBlock, truncateIfNeeded(diff));
+            You are a senior software engineer reviewing a GitHub pull request.
+
+            Below is relevant existing code from the same repository, provided as context
+            to help you judge whether the new changes follow the codebase's existing patterns
+            and conventions. Use it only as reference — do not review the context itself.
+
+            %s
+
+            Now review the following diff. Some files may be summarized by name only (see
+            "OTHER MODIFIED FILES" / "DELETED FILES" sections) if the PR was too large to show
+            every change in full — acknowledge these briefly if present, but focus your review
+            on the files shown in full detail.
+
+            Provide a concise summary covering:
+            1. What changed (high level)
+            2. Potential risk areas or bugs
+            3. Whether the change is consistent with the existing codebase patterns shown above (if any relevant context was provided)
+
+            Keep it under 220 words, use markdown formatting.
+
+            DIFF:
+            %s
+            """.formatted(contextBlock, compressedDiff);
+
         Map<String, Object> requestBody = Map.of(
                 "model", model,
                 "messages", List.of(Map.of("role", "user", "content", prompt)),

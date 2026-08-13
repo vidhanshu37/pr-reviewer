@@ -30,6 +30,7 @@ public class ReviewOrchestratorService {
     private final CodeChunkingService codeChunkingService;
     private final CodebaseIndexingService codebaseIndexingService;
     private final RetrievalService retrievalService;
+    private final DiffCompressionService diffCompressionService;
 
     @Async("reviewTaskExecutor")
     public void processPullRequestAsync(JsonNode webhookPayload, String deliveryId) {
@@ -38,9 +39,9 @@ public class ReviewOrchestratorService {
         int prNumber = webhookPayload.at("/pull_request/number").asInt();
         long installationId = webhookPayload.at("/installation/id").asLong();
 
-        if(!reviewCacheService.markDeliveryProcessed(deliveryId)) {
-            return;
-        }
+//        if(!reviewCacheService.markDeliveryProcessed(deliveryId)) {
+//            return;
+//        }
 
         try {
             List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId);
@@ -70,8 +71,8 @@ public class ReviewOrchestratorService {
                 return;
             }
 
-            String diff = diffChunkingService.buildDiffText(relevantFiles);
-            String diffHash = reviewCacheService.hashDiff(diff);
+            String diff = diffCompressionService.buildCompressedDiff(relevantFiles);
+//            String diffHash = reviewCacheService.hashDiff(diff);
 
             Set<String> fileInThisPr = relevantFiles.stream()
                     .map(FileDiff::getFilename)
@@ -81,13 +82,13 @@ public class ReviewOrchestratorService {
             log.info("vidhanshu ::: first retrieved chunk = {}",
                     retrievedChunks.isEmpty() ? "NONE" : retrievedChunks.get(0));
 
-            String summary = reviewCacheService.getCachedSummary(diffHash);
+//            String summary = reviewCacheService.getCachedSummary(diffHash);
 
-            if(summary == null) {
-                summary = llmReviewService.generateSummary(diff, retrievedChunks);
+//            if(summary == null) {
+               String summary = llmReviewService.generateSummary(diff, retrievedChunks);
 
-                reviewCacheService.putSummary(diffHash, summary);
-            }
+//                reviewCacheService.putSummary(diffHash, summary);
+//            }
 
 //            this will send the summary as a comment to the PR
             gitHubClientService.postComment(owner, repo, prNumber, summary, installationId);
