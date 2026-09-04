@@ -14,11 +14,9 @@ public class StartupFailureListener implements ApplicationListener<ApplicationFa
         if (ex.getMessage().contains("Connection refused")) {
 
             System.err.println();
-            System.err.println("====================================");
             System.err.println("PostgreSQL is not running.");
             System.err.println("Start the Docker container:");
             System.err.println("docker start pr-reviewer-pg");
-            System.err.println("====================================");
         }
     }
 }

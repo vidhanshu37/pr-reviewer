@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 public class WebhookController {
 
+    // this is testing msg
     private final WebhookSignatureVerifier verifier;
     private final ReviewOrchestratorService reviewOrchestratorService;
     private final ObjectMapper objectMapper;
@@ -28,6 +29,10 @@ public class WebhookController {
 
         if (!verifier.isValid(payload, signature)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid signature");
+        }
+
+        if (!"pull_request".equals(eventType)) {
+            return ResponseEntity.ok("Event ignored");
         }
 
         if (!"pull_request".equals(eventType)) {

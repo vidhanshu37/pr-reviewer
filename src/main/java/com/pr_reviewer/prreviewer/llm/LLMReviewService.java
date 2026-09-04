@@ -1,5 +1,8 @@
 package com.pr_reviewer.prreviewer.llm;
+
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -7,6 +10,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class LLMReviewService {
 
@@ -25,19 +29,33 @@ public class LLMReviewService {
                 .build();
     }
 
-    public String generateSummary(String diff) {
+    public String generateSummary(String compressedDiff, List<Document> retrievedChunks) {
+        String contextBlock = buildContextBlock(retrievedChunks);
+
         String prompt = """
-                You are reviewing a GitHub pull request. Below is the diff of changes.
-                Provide a concise summary covering:
-                1. What changed (high level)
-                2. Potential risk areas or bugs
-                3. Any obvious code quality concerns
+            You are a senior software engineer reviewing a GitHub pull request.
 
-                Keep it under 200 words, use markdown formatting.
+            Below is relevant existing code from the same repository, provided as context
+            to help you judge whether the new changes follow the codebase's existing patterns
+            and conventions. Use it only as reference — do not review the context itself.
 
-                DIFF:
-                %s
-                """.formatted(truncateIfNeeded(diff));
+            %s
+
+            Now review the following diff. Some files may be summarized by name only (see
+            "OTHER MODIFIED FILES" / "DELETED FILES" sections) if the PR was too large to show
+            every change in full — acknowledge these briefly if present, but focus your review
+            on the files shown in full detail.
+
+            Provide a concise summary covering:
+            1. What changed (high level)
+            2. Potential risk areas or bugs
+            3. Whether the change is consistent with the existing codebase patterns shown above (if any relevant context was provided)
+
+            Keep it under 220 words, use markdown formatting.
+
+            DIFF:
+            %s
+            """.formatted(contextBlock, compressedDiff);
 
         Map<String, Object> requestBody = Map.of(
                 "model", model,
@@ -53,7 +71,23 @@ public class LLMReviewService {
                 .bodyToMono(JsonNode.class)
                 .block();
 
+        log.info("Prompt length: {} chars. Context included: {} chars", prompt.length(), contextBlock.length());
         return response.at("/choices/0/message/content").asText();
+    }
+
+    private String buildContextBlock(List<Document> retrievedChunks) {
+        if (retrievedChunks == null || retrievedChunks.isEmpty()) {
+            log.info("No relevant retrieved chunks found !!!");
+            return "No additional codebase context was available for this review.";
+        }
+
+        StringBuilder sb = new StringBuilder("EXISTING CODEBASE CONTEXT:\n");
+        for (Document doc : retrievedChunks) {
+            sb.append("### From: ").append(doc.getMetadata().get("filename")).append("\n");
+            sb.append(doc.getText()).append("\n\n");
+        }
+
+        return sb.toString();
     }
 
     private String truncateIfNeeded(String diff) {

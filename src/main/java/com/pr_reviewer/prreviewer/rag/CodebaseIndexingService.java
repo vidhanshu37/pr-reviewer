@@ -14,11 +14,11 @@ import java.util.List;
 public class CodebaseIndexingService {
     private final VectorStore vectorStore;
 
-    public void indexChunks(List<Document> chunks) {
-        if (chunks.isEmpty()) {
-            return;
+    public void indexChunks(String repoFullName, String filename, List<Document> chunks) {
+        vectorStore.delete("repo == '" + repoFullName + "' && filename == '" + filename + "'");
+        if (!chunks.isEmpty()) {
+            vectorStore.add(chunks);
         }
-        vectorStore.add(chunks);
-        log.info("Indexed {} chunks into vector store", chunks.size());
+        log.info("Re-indexed {} - removed old chunks, added {} new chunks", filename, chunks.size());
     }
 }
