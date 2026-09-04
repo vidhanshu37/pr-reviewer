@@ -12,7 +12,7 @@ import java.util.Map;
 @Service
 public class CodeChunkingService {
 
-    private static final int MAX_CHUNK_LINES = 60;
+    private static final int MAX_CHUNK_LINES = 150;
     private static final int MIN_CHUNK_LINES = 5;
 
     public List<Document> chunkFile(String repoFullName, String filename, String content) {

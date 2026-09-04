@@ -2,17 +2,20 @@ package com.pr_reviewer.prreviewer.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.pr_reviewer.prreviewer.dto.FileDiff;
+import com.pr_reviewer.prreviewer.dto.Review;
 import com.pr_reviewer.prreviewer.github.GitHubClientService;
 import com.pr_reviewer.prreviewer.llm.LLMReviewService;
 import com.pr_reviewer.prreviewer.rag.CodeChunkingService;
 import com.pr_reviewer.prreviewer.rag.CodebaseIndexingService;
 import com.pr_reviewer.prreviewer.rag.RetrievalService;
+import com.pr_reviewer.prreviewer.review.repository.ReviewRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -31,6 +34,7 @@ public class ReviewOrchestratorService {
     private final CodebaseIndexingService codebaseIndexingService;
     private final RetrievalService retrievalService;
     private final DiffCompressionService diffCompressionService;
+    private final ReviewRepository reviewRepository;
 
     @Async("reviewTaskExecutor")
     public void processPullRequestAsync(JsonNode webhookPayload, String deliveryId) {
@@ -64,8 +68,6 @@ public class ReviewOrchestratorService {
                 }
             }
 
-            // this is testing msg
-
             if (relevantFiles.isEmpty()) {
                 log.info("No relevant files to review for PR #{} on {}/{} — skipping LLM call", prNumber, owner, repo);
                 return;
@@ -93,6 +95,14 @@ public class ReviewOrchestratorService {
 //            this will send the summary as a comment to the PR
             gitHubClientService.postComment(owner, repo, prNumber, summary, installationId);
             log.info("Review posted for PR #{} on {}/{}", prNumber, owner, repo);
+
+            Review reviewRecord = new Review();
+            reviewRecord.setRepoFullName(repoFullName);
+            reviewRecord.setPrNumber(prNumber);
+            reviewRecord.setSummary(summary);
+            reviewRecord.setRetrievedChunkCount(retrievedChunks.size());
+            reviewRecord.setCreatedAt(Instant.now());
+            reviewRepository.save(reviewRecord);
         } catch (Exception e) {
             log.error("Failed to process PR #{} on {}/{}: {}", prNumber, owner, repo, e.getMessage(), e);
         }
