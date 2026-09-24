@@ -1,5 +1,6 @@
 package com.pr_reviewer.prreviewer.auth;
 
+import com.nimbusds.openid.connect.sdk.assurance.Status;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,5 +23,10 @@ public class AuthController {
                 "username", principal.getAttribute("login"),
                 "avatarUrl", principal.getAttribute("avatar_url")
         );
+    }
+
+    @GetMapping("/api/health-check")
+    public Status healthCheck() {
+        return new Status("ok");
     }
 }

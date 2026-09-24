@@ -1,13 +1,13 @@
 package com.pr_reviewer.prreviewer.review.controller;
 
 import com.pr_reviewer.prreviewer.dto.Review;
+import com.pr_reviewer.prreviewer.review.ReviewSummaryDto;
 import com.pr_reviewer.prreviewer.review.repository.ReviewRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -19,8 +19,9 @@ public class ReviewController {
     private final ReviewRepository reviewRepository;
 
     @GetMapping
-    public List<Review> getAllReviews() {
-        return reviewRepository.findAll();
+    public Page<ReviewSummaryDto> getAllReviews(@RequestParam(defaultValue = "0") int page,
+                                                @RequestParam(defaultValue = "10") int size) {
+        return reviewRepository.findAllSummaries(PageRequest.of(page, size));
     }
 
     @GetMapping("/{id}")

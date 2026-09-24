@@ -15,7 +15,6 @@ public class RedisConfig {
         config.setHostName(env.getProperty("spring.data.redis.host"));
         config.setPort(Integer.parseInt(env.getProperty("spring.data.redis.port")));
         config.setPassword(env.getProperty("spring.data.redis.password"));
-        // No SSL configured here - matches Redis Cloud's plain sample code
         return new LettuceConnectionFactory(config);
     }
 }

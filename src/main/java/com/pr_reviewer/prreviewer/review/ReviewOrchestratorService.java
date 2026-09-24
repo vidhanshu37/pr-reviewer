@@ -5,8 +5,7 @@ import com.pr_reviewer.prreviewer.dto.FileDiff;
 import com.pr_reviewer.prreviewer.dto.Review;
 import com.pr_reviewer.prreviewer.github.GitHubClientService;
 import com.pr_reviewer.prreviewer.llm.LLMReviewService;
-import com.pr_reviewer.prreviewer.rag.CodeChunkingService;
-import com.pr_reviewer.prreviewer.rag.CodebaseIndexingService;
+import com.pr_reviewer.prreviewer.rag.RepoIndexingService;
 import com.pr_reviewer.prreviewer.rag.RetrievalService;
 import com.pr_reviewer.prreviewer.review.repository.ReviewRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,8 +29,7 @@ public class ReviewOrchestratorService {
     private final DiffFilterService diffFilterService;
     private final DiffChunkingService diffChunkingService;
     private final ReviewCacheService reviewCacheService;
-    private final CodeChunkingService codeChunkingService;
-    private final CodebaseIndexingService codebaseIndexingService;
+    private final RepoIndexingService repoIndexingService;
     private final RetrievalService retrievalService;
     private final DiffCompressionService diffCompressionService;
     private final ReviewRepository reviewRepository;
@@ -53,19 +51,14 @@ public class ReviewOrchestratorService {
 
             String repoFullName = owner + "/" + repo;
 
+            String headSha = webhookPayload.at("/pull_request/head/sha").asText();
+
             for (FileDiff file : relevantFiles) {
                 if ("removed".equals(file.getStatus())) {
                     log.info("Skipping content fetch for deleted file: {}", file.getFilename());
                     continue;
                 }
-                String headSha = webhookPayload.at("/pull_request/head/sha").asText();
-                try {
-                    String fullContent = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);
-                    List<Document> chunks = codeChunkingService.chunkFile(repoFullName, file.getFilename(), fullContent);
-                    codebaseIndexingService.indexChunks(repoFullName, file.getFilename(), chunks);
-                } catch (Exception e) {
-                    log.warn("Skipping indexing for {} - failed to fetch content: {}", file.getFilename(), e.getMessage());
-                }
+                repoIndexingService.indexFileAsync(owner, repo, repoFullName, headSha, installationId, file);
             }
 
             if (relevantFiles.isEmpty()) {
