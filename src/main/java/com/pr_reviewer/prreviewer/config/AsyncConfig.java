@@ -13,9 +13,9 @@ public class AsyncConfig {
     @Bean(name = "reviewTaskExecutor")
     public Executor reviewTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(5);
-        executor.setQueueCapacity(50);
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(200);
         executor.setThreadNamePrefix("pr-review-");
         executor.initialize();
         return executor;

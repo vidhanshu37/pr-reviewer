@@ -35,10 +35,6 @@ public class WebhookController {
             return ResponseEntity.ok("Event ignored");
         }
 
-        if (!"pull_request".equals(eventType)) {
-            return ResponseEntity.ok("Event ignored");
-        }
-
         try {
             JsonNode json = objectMapper.readTree(payload);
             String action = json.get("action").asText();
@@ -48,6 +44,7 @@ public class WebhookController {
                 reviewOrchestratorService.processPullRequestAsync(json, deliveryId);
             }
         } catch (Exception e) {
+            log.error("Failed to process webhook payload, deliveryId={}", deliveryId, e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Malformed payload");
         }
         return ResponseEntity.ok("Accepted");
