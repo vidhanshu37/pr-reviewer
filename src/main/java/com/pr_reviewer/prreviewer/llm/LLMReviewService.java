@@ -30,6 +30,7 @@ public class LLMReviewService {
     }
 
     public String generateSummary(String compressedDiff, List<Document> retrievedChunks) {
+        log.info("Compressed Difference : {} And Retrieved Chunk Length : {}", compressedDiff, retrievedChunks.size());
         String contextBlock = buildContextBlock(retrievedChunks);
 
         String prompt = """
@@ -60,19 +61,34 @@ public class LLMReviewService {
         Map<String, Object> requestBody = Map.of(
                 "model", model,
                 "messages", List.of(Map.of("role", "user", "content", prompt)),
-                "max_tokens", 500,
-                "temperature", 0.3
+                "max_tokens", 1500,
+                "temperature", 0.3,
+                "reasoning_effort", "low"
         );
 
-        JsonNode response = webClient.post()
-                .uri("/chat/completions")
-                .bodyValue(requestBody)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block();
+        String content = "";
 
-        log.info("Prompt length: {} chars. Context included: {} chars", prompt.length(), contextBlock.length());
-        return response.at("/choices/0/message/content").asText();
+        try {
+            JsonNode response = webClient.post()
+                    .uri("/chat/completions")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .block();
+
+            String finishReason = response.at("/choices/0/finish_reason").asText();
+            content = response.at("/choices/0/message/content").asText();
+
+            log.info("Prompt length: {} chars. Context included: {} chars. finish_reason={}, content length={}",
+                    prompt.length(), contextBlock.length(), finishReason, content.length());
+
+            if (content.isBlank()) {
+                log.warn("LLM returned blank content. finish_reason={}, raw response={}", finishReason, response);
+            }
+        } catch (Exception e) {
+            log.error("Summary Generation Failed : {}", e.getMessage());
+        }
+        return content;
     }
 
     private String buildContextBlock(List<Document> retrievedChunks) {

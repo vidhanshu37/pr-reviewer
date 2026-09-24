@@ -86,6 +86,12 @@ public class ReviewOrchestratorService {
 //            }
 
 //            this will send the summary as a comment to the PR
+
+            if(summary.isBlank()) {
+                log.error("LLM returned blank summary for PR #{} on {} - skipping comment post", prNumber, repoFullName);
+                return;
+            }
+
             gitHubClientService.postComment(owner, repo, prNumber, summary, installationId);
             log.info("Review posted for PR #{} on {}/{}", prNumber, owner, repo);
 

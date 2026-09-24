@@ -18,7 +18,7 @@ public class RepoIndexingService {
     private final CodeChunkingService codeChunkingService;
     private final CodebaseIndexingService codebaseIndexingService;
 
-    @Async("indexingTaskExecutor")
+    @Async("reviewTaskExecutor")
     public void indexFileAsync(String owner, String repo, String repoFullName, String headSha, long installationId, FileDiff file) {
         try {
             String content = gitHubClientService.fetchFileContent(owner, repo, file.getFilename(), headSha, installationId);

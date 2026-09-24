@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -37,14 +38,20 @@ public class GitHubClientService {
 
     public void postComment(String owner, String repo, int prNumber, String body, long installationId) {
         String token = authService.getInstallationToken(installationId);
-        webClient.post()
-                .uri("/repos/{owner}/{repo}/issues/{pr}/comments", owner, repo, prNumber)
-                .header("Authorization", "Bearer " + token)
-                .header("Accept", "application/vnd.github.v3+json")
-                .bodyValue(Map.of("body", body))
-                .retrieve()
-                .toBodilessEntity()
-                .block();
+        try {
+            webClient.post()
+                    .uri("/repos/{owner}/{repo}/issues/{pr}/comments", owner, repo, prNumber)
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .bodyValue(Map.of("body", body))
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("GitHub rejected comment for PR #{} on {}/{}: status={}, body={}",
+                    prNumber, owner, repo, e.getStatusCode(), e.getResponseBodyAsString());
+            throw e;
+        }
     }
 
 
