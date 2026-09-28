@@ -34,29 +34,43 @@ public class LLMReviewService {
         String contextBlock = buildContextBlock(retrievedChunks);
 
         String prompt = """
-            You are a senior software engineer reviewing a GitHub pull request.
-
-            Below is relevant existing code from the same repository, provided as context
-            to help you judge whether the new changes follow the codebase's existing patterns
-            and conventions. Use it only as reference — do not review the context itself.
-
-            %s
-
-            Now review the following diff. Some files may be summarized by name only (see
-            "OTHER MODIFIED FILES" / "DELETED FILES" sections) if the PR was too large to show
-            every change in full — acknowledge these briefly if present, but focus your review
-            on the files shown in full detail.
-
-            Provide a concise summary covering:
-            1. What changed (high level)
-            2. Potential risk areas or bugs
-            3. Whether the change is consistent with the existing codebase patterns shown above (if any relevant context was provided)
-
-            Keep it under 220 words, use markdown formatting.
-
-            DIFF:
-            %s
-            """.formatted(contextBlock, compressedDiff);
+                You are a senior software engineer reviewing a GitHub pull request.
+                
+                Below is relevant existing code from the same repository, provided as context
+                to help you judge whether the new changes follow the codebase's existing patterns
+                and conventions. Use it only as reference — do not review the context itself.
+                
+                %s
+                
+                Now review the following diff. Some files may be summarized by name only (see
+                "OTHER MODIFIED FILES" / "DELETED FILES" sections) if the PR was too large to show
+                every change in full — acknowledge these briefly if present, but focus your review
+                on the files shown in full detail.
+                
+                Provide a concise summary covering:
+                1. What changed (high level) — MUST be presented as a markdown table with exactly
+                   two columns: "File" and "What changed". Each row should contain one relevant
+                   file/component and a concise description of its high-level change.
+                2. Potential risk areas or bugs
+                3. Whether the change is consistent with the existing codebase patterns shown above (if any relevant context was provided)
+                
+                The "High-level changes" section MUST always use the following format:
+                
+                **High-level changes**
+                
+                | File | What changed |
+                |------|--------------|
+                | `FileName` | Concise description of the change. |
+                | `AnotherFile` | Concise description of the change. |
+                
+                Do NOT use bullet points or a numbered list for the "High-level changes" section.
+                Always use the table format, even when there is only one changed file.
+                
+                Keep it under 220 words, use markdown formatting.
+                
+                DIFF:
+                %s
+                """.formatted(contextBlock, compressedDiff);
 
         Map<String, Object> requestBody = Map.of(
                 "model", model,
