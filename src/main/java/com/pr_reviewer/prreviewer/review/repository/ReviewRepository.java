@@ -7,10 +7,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
+
 public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     @Query("SELECT new com.pr_reviewer.prreviewer.review.ReviewSummaryDto(" +
             "r.id, r.repoFullName, r.prNumber, r.createdAt) " +
             "FROM Review r ORDER BY r.createdAt DESC")
     Page<ReviewSummaryDto> findAllSummaries(Pageable pageable);
+
+    List<Review> findByRepoFullNameAndPrNumberOrderByCreatedAtDesc(String repoFullName, int prNumber);
 }

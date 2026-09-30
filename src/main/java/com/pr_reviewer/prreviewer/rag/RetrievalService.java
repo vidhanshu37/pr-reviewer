@@ -25,7 +25,6 @@ public class RetrievalService {
             filter.append(" && filename != '").append(filename).append("'");
         }
 
-        // this is test msg
         SearchRequest request = SearchRequest.builder()
                 .query(diffText)
                 .topK(TOP_K + excludeFilenames.size()) // to remove current PR's file

@@ -1,9 +1,12 @@
 package com.pr_reviewer.prreviewer.github;
 
+import com.pr_reviewer.prreviewer.dto.Review;
 import com.pr_reviewer.prreviewer.llm.LLMReviewService;
 import com.pr_reviewer.prreviewer.rag.RetrievalService;
 import com.pr_reviewer.prreviewer.review.ReviewOrchestratorService;
+import com.pr_reviewer.prreviewer.review.repository.ReviewRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
 import org.springframework.ai.document.Document;
 import org.springframework.http.ResponseEntity;
@@ -16,11 +19,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @RestController
 @RequestMapping("/api/repos")
 @RequiredArgsConstructor
+@Slf4j
 public class GitHubRepoController {
     private final GitHubSyncService syncService;
     private final GitHubRepoRepository repoRepository;
@@ -29,6 +34,7 @@ public class GitHubRepoController {
     private final GitHubAppAuthService gitHubAppAuthService;
     private final ReviewOrchestratorService reviewOrchestratorService;
     private final RetrievalService retrievalService;
+    private final ReviewRepository reviewRepository;
 
     private static final Duration CACHE_TTL = Duration.ofMinutes(10);
     private final LLMReviewService lLMReviewService;
@@ -43,9 +49,8 @@ public class GitHubRepoController {
         boolean stale = cached.isEmpty() || cached.stream()
                 .anyMatch(r -> r.getLastSyncedAt() == null || r.getLastSyncedAt().isBefore(Instant.now().minus(CACHE_TTL)));
 
-        if(stale) {
-             return syncService.syncRepos(authToken);
-        }
+        if(stale)
+            return syncService.syncRepos(authToken);
 
         return cached;
     }
@@ -129,5 +134,38 @@ public class GitHubRepoController {
                     ));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    private Optional<GitHubRepo> ownedRepo(Long repoId, OAuth2AuthenticationToken authToken) {
+        Long userId = Long.valueOf(authToken.getPrincipal().getAttribute("id").toString());
+        return repoRepository.findById(repoId).filter(r -> userId.equals(r.getOwnerGithubId()));
+    }
+
+    @GetMapping("/{repoId}/pulls/{prNumber}/reviews")
+    public ResponseEntity<List<Review>> getPullRequestReviews(@PathVariable Long repoId,
+                                                              @PathVariable int prNumber, OAuth2AuthenticationToken authToken) {
+        return ownedRepo(repoId, authToken)
+                .map(repo -> ResponseEntity.ok(
+                        reviewRepository.findByRepoFullNameAndPrNumberOrderByCreatedAtDesc(repo.getFullName(), prNumber)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/{repoId}/pulls/{prNumber}/review")
+    public ResponseEntity<?> requestPullRequestReview(@PathVariable Long repoId, @PathVariable int prNumber,
+                                                      @RequestParam(defaultValue = "false") boolean post, OAuth2AuthenticationToken authToken) {
+        return ownedRepo(repoId, authToken).<ResponseEntity<?>>map(repo -> {
+            String[] parts = repo.getFullName().split("/", 2);
+            Long installationId = gitHubAppAuthService.getInstallationIdForRepo(parts[0], parts[1]);
+            if (installationId == null) {
+                return ResponseEntity.status(409).body(Map.of("error",
+                        "GitHub App is not installed on this repository. Install it first to request reviews."));
+            }
+            try {
+                return ResponseEntity.ok(reviewOrchestratorService
+                        .reviewPullRequestNow(parts[0], parts[1], prNumber, installationId, post));
+            } catch (IllegalStateException e) {
+                return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
+            }
+        }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 }
