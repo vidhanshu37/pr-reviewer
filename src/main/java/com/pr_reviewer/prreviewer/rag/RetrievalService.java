@@ -27,7 +27,7 @@ public class RetrievalService {
 
         SearchRequest request = SearchRequest.builder()
                 .query(diffText)
-                .topK(TOP_K + excludeFilenames.size()) // to remove current PR's file
+                .topK(TOP_K)
                 .filterExpression(filter.toString())
                 .build();
 

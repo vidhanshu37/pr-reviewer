@@ -1,9 +1,11 @@
 package com.pr_reviewer.prreviewer.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -16,12 +18,15 @@ public class LLMReviewService {
 
     private final WebClient webClient;
     private final String model;
+    private final CircuitBreakerFactory circuitBreakerFactory;
 
     public LLMReviewService(
             @Value("${groq.api.key}") String apiKey,
             @Value("${groq.api.base-url}") String baseUrl,
-            @Value("${groq.model}") String model) {
+            @Value("${groq.model}") String model,
+            CircuitBreakerFactory circuitBreakerFactory) {
         this.model = model;
+        this.circuitBreakerFactory = circuitBreakerFactory;
         this.webClient = WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
@@ -30,6 +35,21 @@ public class LLMReviewService {
     }
 
     public String generateSummary(String compressedDiff, List<Document> retrievedChunks) {
+        return circuitBreakerFactory.create("llmReview")
+                .run(() -> callLlm(compressedDiff, retrievedChunks),
+                        throwable -> handleFallback(throwable, compressedDiff));
+    }
+
+    private String handleFallback(Throwable throwable, String compressedDiff) {
+        if (throwable instanceof CallNotPermittedException) {
+            log.warn("LLM circuit breaker is OPEN — skipping call, diff length={}", compressedDiff.length());
+        } else {
+            log.error("LLM call failed and fell back: {}", throwable.getMessage());
+        }
+        return "";
+    }
+
+    private String callLlm(String compressedDiff, List<Document> retrievedChunks) {
         log.info("Compressed Difference : {} And Retrieved Chunk Length : {}", compressedDiff, retrievedChunks.size());
         String contextBlock = buildContextBlock(retrievedChunks);
 
@@ -80,27 +100,21 @@ public class LLMReviewService {
                 "reasoning_effort", "low"
         );
 
-        String content = "";
+        JsonNode response = webClient.post()
+                .uri("/chat/completions")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .block();
 
-        try {
-            JsonNode response = webClient.post()
-                    .uri("/chat/completions")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .block();
+        String finishReason = response.at("/choices/0/finish_reason").asText();
+        String content = response.at("/choices/0/message/content").asText();
 
-            String finishReason = response.at("/choices/0/finish_reason").asText();
-            content = response.at("/choices/0/message/content").asText();
+        log.info("Prompt length: {} chars. Context included: {} chars. finish_reason={}, content length={}",
+                prompt.length(), contextBlock.length(), finishReason, content.length());
 
-            log.info("Prompt length: {} chars. Context included: {} chars. finish_reason={}, content length={}",
-                    prompt.length(), contextBlock.length(), finishReason, content.length());
-
-            if (content.isBlank()) {
-                log.warn("LLM returned blank content. finish_reason={}, raw response={}", finishReason, response);
-            }
-        } catch (Exception e) {
-            log.error("Summary Generation Failed : {}", e.getMessage());
+        if (content.isBlank()) {
+            log.warn("LLM returned blank content. finish_reason={}, raw response={}", finishReason, response);
         }
         return content;
     }

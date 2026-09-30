@@ -134,6 +134,7 @@ public class ReviewOrchestratorService {
         review.setSummary(summary);
         review.setRetrievedChunkCount(chunks.size());
         review.setCreatedAt(Instant.now());
+
         return reviewRepository.save(review);
     }
 }
