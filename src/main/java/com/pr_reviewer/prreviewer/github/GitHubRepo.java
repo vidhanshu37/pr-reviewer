@@ -10,7 +10,13 @@ import java.time.Instant;
 @Entity
 @Getter
 @Setter
-@Table(name = "github_repos")
+@Table(
+        name = "github_repos",
+        indexes = {
+                @Index(name = "idx_github_owner_github_id", columnList = "ownerGithubId"),
+                @Index(name = "idx_github_repos_owner_repo", columnList = "ownerGithubId, githubRepoId", unique = true)
+        }
+)
 @NoArgsConstructor
 public class GitHubRepo {
     @Id

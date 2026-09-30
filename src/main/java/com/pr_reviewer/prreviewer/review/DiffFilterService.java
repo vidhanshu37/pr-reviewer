@@ -33,7 +33,6 @@ public class DiffFilterService {
         log.info("Diff filter: {} total files, {} relevant, {} excluded -> excluded files: {}",
                 files.size(), relevant.size(), excludedNames.size(), excludedNames);
 
-
         return relevant;
     }
 

@@ -46,8 +46,8 @@ public class ReviewOrchestratorService {
 //        }
 
         try {
-            List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId);
-            List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles);
+            List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId); // fetch file and max 100 in 1 page
+            List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles); // remove irrelevant file
 
             String repoFullName = owner + "/" + repo;
 
@@ -105,5 +105,35 @@ public class ReviewOrchestratorService {
         } catch (Exception e) {
             log.error("Failed to process PR #{} on {}/{}: {}", prNumber, owner, repo, e.getMessage(), e);
         }
+    }
+
+    public Review reviewPullRequestNow(String owner, String repo, int prNumber, long installationId, boolean postComment) {
+        String repoFullName = owner + "/" + repo;
+
+        List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(
+                gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId));
+
+        if (relevantFiles.isEmpty()) {
+            throw new IllegalStateException("This pull request has no reviewable files.");
+        }
+
+        String diff = diffCompressionService.buildCompressedDiff(relevantFiles);
+        Set<String> names = relevantFiles.stream().map(FileDiff::getFilename).collect(Collectors.toSet());
+        List<Document> chunks = retrievalService.retrieveRelevantChunks(diff, names, repoFullName);
+
+        String summary = llmReviewService.generateSummary(diff, chunks);
+        if (summary.isBlank()) {
+            throw new IllegalStateException("The reviewer returned an empty response. Try again.");
+        }
+        if (postComment) {
+            gitHubClientService.postComment(owner, repo, prNumber, summary, installationId);
+        }
+        Review review = new Review();
+        review.setRepoFullName(repoFullName);
+        review.setPrNumber(prNumber);
+        review.setSummary(summary);
+        review.setRetrievedChunkCount(chunks.size());
+        review.setCreatedAt(Instant.now());
+        return reviewRepository.save(review);
     }
 }

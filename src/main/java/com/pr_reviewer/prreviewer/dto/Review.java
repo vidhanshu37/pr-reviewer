@@ -13,7 +13,12 @@ import java.time.Instant;
 import java.util.List;
 
 @Entity
-@Table(name = "reviews")
+@Table(name = "reviews",
+        indexes = {
+                @Index(name = "idx_reviews_created_at", columnList = "createdAt DESC"),
+                @Index(name = "idx_reviews_repo_full_name", columnList = "repoFullName")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor

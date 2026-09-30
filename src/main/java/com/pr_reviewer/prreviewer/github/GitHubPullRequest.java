@@ -8,7 +8,12 @@ import lombok.Setter;
 import java.time.Instant;
 
 @Entity
-@Table(name = "github_pull_requests")
+@Table(name = "github_pull_requests",
+        indexes = {
+                @Index(name = "idx_github_pull_requests_repo_id", columnList = "repo_id"),
+                @Index(name = "idx_github_pull_requests_repo_pr_number", columnList = "repo_id, prNumber", unique = true)
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
