@@ -26,6 +26,9 @@ public class McpJwtService {
     private final String issuer;
     private final String audience;
 
+    public static final String CLAIM_INSTALLATION = "installation";
+    public static final String CLAIM_SHA = "sha";
+
     public McpJwtService(
             @Value("${mcp.jwt.secret}") String secret,
             @Value("${mcp.jwt.ttl-minutes}") long ttlMinutes,
@@ -42,7 +45,7 @@ public class McpJwtService {
         this.audience = audience;
     }
 
-    public String issue(String jobId, String repo, int prNumber) {
+    public String issue(String jobId, String repo, int prNumber, long installationId, String headSha) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
@@ -52,6 +55,8 @@ public class McpJwtService {
                 .claim(CLAIM_REPO, repo)
                 .claim(CLAIM_PR, prNumber)
                 .claim(CLAIM_SCOPE, SCOPE_READ)
+                .claim(CLAIM_INSTALLATION, installationId)
+                .claim(CLAIM_SHA, headSha)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(ttl)))
                 .signWith(key, Jwts.SIG.HS256)
