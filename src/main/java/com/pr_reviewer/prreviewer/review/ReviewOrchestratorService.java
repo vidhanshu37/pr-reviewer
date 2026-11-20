@@ -1,10 +1,13 @@
 package com.pr_reviewer.prreviewer.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.pr_reviewer.prreviewer.agent.AgentClient;
+import com.pr_reviewer.prreviewer.agent.AgentReviewResponse;
 import com.pr_reviewer.prreviewer.dto.FileDiff;
 import com.pr_reviewer.prreviewer.dto.Review;
 import com.pr_reviewer.prreviewer.github.GitHubClientService;
 import com.pr_reviewer.prreviewer.llm.LLMReviewService;
+import com.pr_reviewer.prreviewer.mcp.security.McpJwtService;
 import com.pr_reviewer.prreviewer.rag.RepoIndexingService;
 import com.pr_reviewer.prreviewer.rag.RetrievalService;
 import com.pr_reviewer.prreviewer.review.repository.ReviewRepository;
@@ -33,6 +36,8 @@ public class ReviewOrchestratorService {
     private final RetrievalService retrievalService;
     private final DiffCompressionService diffCompressionService;
     private final ReviewRepository reviewRepository;
+    private final McpJwtService mcpJwtService;
+    private final AgentClient agentClient;
 
     @Async("reviewTaskExecutor")
     public void processPullRequestAsync(JsonNode webhookPayload, String deliveryId) {
@@ -46,6 +51,18 @@ public class ReviewOrchestratorService {
 //        }
 
         try {
+            ReviewJob job = ReviewJob.fromWebhook(webhookPayload);
+            String jobToken = mcpJwtService.issue(
+                    job.jobId(), job.repoFullName(), job.prNumber(), job.installationId(), job.headSha());
+            log.info("Issued MCP job token jobId={} repo={} pr={} (token not logged)",
+                    job.jobId(), job.repoFullName(), job.prNumber());
+
+            // TEMP (Day 2.3 test): replaced by agent.enabled flag + fallback in 2.5
+            AgentReviewResponse agentResult = agentClient.review(job, jobToken);
+            log.info("Agent result jobId={} status={} findings={} trace={} error={}",
+                    job.jobId(), agentResult.status(), agentResult.findings().size(),
+                    agentResult.trace(), agentResult.error());
+
             List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId); // fetch file and max 100 in 1 page
             List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles); // remove irrelevant file
 
