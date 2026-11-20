@@ -24,6 +24,7 @@ public class PrReviewMcpTools {
     private static final int MAX_FILE_CHARS = 12_000;
     private static final int MAX_QUERY_CHARS = 500;
     private static final int MAX_CHUNK_CHARS = 1_500;
+    private static final int MAX_FULL_DIFF_CHARS = 80_000;
 
     private final RetrievalService retrievalService;
 
@@ -54,6 +55,29 @@ public class PrReviewMcpTools {
             }
 
             String diff = diffCompressionService.buildCompressedDiff(relevantFiles);
+            return "Pull request #" + scope.prNumber() + " in " + scope.repoFullName() + ": "
+                    + relevantFiles.size() + " reviewable file(s) out of " + allFiles.size() + " changed.\n\n"
+                    + diff;
+        });
+    }
+
+    @McpTool(
+            name = "get_full_pr_diff",
+            description = "Returns the full unified diff of the pull request under review, without the small token budget of get_pr_diff. "
+                    + "Irrelevant files are removed. Very large diffs are capped at about 80,000 characters; files that do not fit are listed by name only. Takes no arguments.")
+    public String getFullPrDiff() {
+        return McpToolSupport.safely("get_full_pr_diff", () -> {
+            McpJobScope scope = McpJobScope.fromCurrentRequest();
+
+            List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(
+                    scope.owner(), scope.repo(), scope.prNumber(), scope.installationId());
+            List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles);
+
+            if (relevantFiles.isEmpty()) {
+                return "No reviewable files in this pull request.";
+            }
+
+            String diff = diffCompressionService.buildFullDiff(relevantFiles, MAX_FULL_DIFF_CHARS);
             return "Pull request #" + scope.prNumber() + " in " + scope.repoFullName() + ": "
                     + relevantFiles.size() + " reviewable file(s) out of " + allFiles.size() + " changed.\n\n"
                     + diff;
