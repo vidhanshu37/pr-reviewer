@@ -54,6 +54,35 @@ public class DiffCompressionService {
         return finalDiff.toString();
     }
 
+    public String buildFullDiff(List<FileDiff> files, int maxChars) {
+        SplitResult split = splitAndStripDeletions(files);
+
+        StringBuilder diff = new StringBuilder();
+        List<String> overflow = new ArrayList<>();
+        int included = 0;
+
+        for (FileDiff file : split.getRemainingFiles()) {
+            String patch = file.getPatch();
+            if (patch == null || patch.isBlank()) {
+                overflow.add(file.getFilename());
+                continue;
+            }
+            String section = "### File: " + file.getFilename() + " (" + file.getStatus() + ")\n" + patch + "\n\n";
+            if (diff.length() + section.length() > maxChars) {
+                overflow.add(file.getFilename());
+                continue;
+            }
+            diff.append(section);
+            included++;
+        }
+
+        diff.append(buildOverflowFilesSection(overflow));
+        diff.append(buildDeletedFilesSection(split.getDeletedFiles()));
+
+        log.info("Built full diff: {} files included, {} name-only, {} deleted, {} chars",
+                included, overflow.size(), split.getDeletedFiles().size(), diff.length());
+        return diff.toString();
+    }
 
     public FitResult fitToBudget(List<FileDiff> sortedFiles) {
         FitResult res = new FitResult();
