@@ -24,7 +24,12 @@ public record AgentReviewResponse(
             String category,
             String message,
             String suggestion,
-            String verdict) {
+            String verdict,
+            String confidence) {
+
+        public boolean isPossible() {
+            return "possible".equalsIgnoreCase(confidence);
+        }
     }
 
     public boolean isDone() {
