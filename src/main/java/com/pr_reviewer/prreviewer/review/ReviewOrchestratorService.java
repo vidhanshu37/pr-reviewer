@@ -1,5 +1,7 @@
 package com.pr_reviewer.prreviewer.review;
 
+import com.pr_reviewer.prreviewer.agent.AgentCommentFormatter;
+import org.springframework.beans.factory.annotation.Value;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.pr_reviewer.prreviewer.agent.AgentClient;
 import com.pr_reviewer.prreviewer.agent.AgentReviewResponse;
@@ -38,6 +40,8 @@ public class ReviewOrchestratorService {
     private final ReviewRepository reviewRepository;
     private final McpJwtService mcpJwtService;
     private final AgentClient agentClient;
+    @Value("${agent.enabled:false}")
+    private boolean agentEnabled;
 
     @Async("reviewTaskExecutor")
     public void processPullRequestAsync(JsonNode webhookPayload, String deliveryId) {
@@ -51,25 +55,18 @@ public class ReviewOrchestratorService {
 //        }
 
         try {
-            ReviewJob job = ReviewJob.fromWebhook(webhookPayload);
-            String jobToken = mcpJwtService.issue(
-                    job.jobId(), job.repoFullName(), job.prNumber(), job.installationId(), job.headSha());
-            log.info("Issued MCP job token jobId={} repo={} pr={} (token not logged)",
-                    job.jobId(), job.repoFullName(), job.prNumber());
-
-            // TEMP (Day 2.3 test): replaced by agent.enabled flag + fallback in 2.5
-            AgentReviewResponse agentResult = agentClient.review(job, jobToken);
-            log.info("Agent result jobId={} status={} findings={} trace={} error={}",
-                    job.jobId(), agentResult.status(), agentResult.findings().size(),
-                    agentResult.trace(), agentResult.error());
-
             List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(owner, repo, prNumber, installationId); // fetch file and max 100 in 1 page
             List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles); // remove irrelevant file
 
-            String repoFullName = owner + "/" + repo;
+            if (relevantFiles.isEmpty()) {
+                log.info("No relevant files to review for PR #{} on {}/{} — skipping review", prNumber, owner, repo);
+                return;
+            }
 
+            String repoFullName = owner + "/" + repo;
             String headSha = webhookPayload.at("/pull_request/head/sha").asText();
 
+            // Indexing always runs, whichever reviewer posts the comment (keeps the RAG index fresh).
             for (FileDiff file : relevantFiles) {
                 if ("removed".equals(file.getStatus())) {
                     log.info("Skipping content fetch for deleted file: {}", file.getFilename());
@@ -78,8 +75,16 @@ public class ReviewOrchestratorService {
                 repoIndexingService.indexFileAsync(owner, repo, repoFullName, headSha, installationId, file);
             }
 
-            if (relevantFiles.isEmpty()) {
-                log.info("No relevant files to review for PR #{} on {}/{} — skipping LLM call", prNumber, owner, repo);
+            // Agent first. If it posted its review, skip the old single-LLM pipeline.
+            String agentComment = runAgentStage(webhookPayload);
+            if (agentComment != null) {
+                Review agentRecord = new Review();
+                agentRecord.setRepoFullName(repoFullName);
+                agentRecord.setPrNumber(prNumber);
+                agentRecord.setSummary(agentComment);
+                agentRecord.setRetrievedChunkCount(0);
+                agentRecord.setCreatedAt(Instant.now());
+                reviewRepository.save(agentRecord);
                 return;
             }
 
@@ -97,7 +102,7 @@ public class ReviewOrchestratorService {
 //            String summary = reviewCacheService.getCachedSummary(diffHash);
 
 //            if(summary == null) {
-               String summary = llmReviewService.generateSummary(diff, retrievedChunks);
+            String summary = llmReviewService.generateSummary(diff, retrievedChunks);
 
 //                reviewCacheService.putSummary(diffHash, summary);
 //            }
@@ -121,6 +126,39 @@ public class ReviewOrchestratorService {
             reviewRepository.save(reviewRecord);
         } catch (Exception e) {
             log.error("Failed to process PR #{} on {}/{}: {}", prNumber, owner, repo, e.getMessage(), e);
+        }
+    }
+
+    /** @return the markdown comment the agent posted to GitHub, or null (caller then runs the old pipeline). */
+    private String runAgentStage(JsonNode webhookPayload) {
+        if (!agentEnabled) {
+            return null;
+        }
+        try {
+            ReviewJob job = ReviewJob.fromWebhook(webhookPayload);
+            String jobToken = mcpJwtService.issue(
+                    job.jobId(), job.repoFullName(), job.prNumber(), job.installationId(), job.headSha());
+            log.info("Issued MCP job token jobId={} repo={} pr={} (token not logged)",
+                    job.jobId(), job.repoFullName(), job.prNumber());
+
+            AgentReviewResponse result = agentClient.review(job, jobToken);
+            log.info("Agent result jobId={} status={} findings={} trace={} error={}",
+                    job.jobId(), result.status(), result.findings().size(), result.trace(), result.error());
+
+            if (!AgentCommentFormatter.isPostable(result)) {
+                log.warn("Agent did not finish (status={}), falling back to single-LLM pipeline", result.status());
+                return null;
+            }
+
+            String body = AgentCommentFormatter.format(result);
+            String[] repo = job.repoFullName().split("/", 2);
+            gitHubClientService.postComment(repo[0], repo[1], job.prNumber(), body, job.installationId());
+            log.info("Agent review posted jobId={} status={} findings={}",
+                    job.jobId(), result.status(), result.findings().size());
+            return body;
+        } catch (Exception e) {
+            log.warn("Agent stage failed, falling back to single-LLM pipeline: {}", e.getClass().getSimpleName());
+            return null;
         }
     }
 
