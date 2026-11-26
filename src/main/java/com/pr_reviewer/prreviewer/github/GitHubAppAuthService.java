@@ -90,7 +90,7 @@ public class GitHubAppAuthService {
             Instant now = Instant.now();
             return Jwts.builder()
                     .issuedAt(Date.from(now.minusSeconds(60)))
-                    .expiration(Date.from(now.plusSeconds(600)))
+                    .expiration(Date.from(now.plusSeconds(540)))
                     .issuer(appId)
                     .signWith(privateKey, Jwts.SIG.RS256)
                     .compact();

@@ -2,14 +2,18 @@ package com.pr_reviewer.prreviewer.mcp;
 
 import com.pr_reviewer.prreviewer.dto.FileDiff;
 import com.pr_reviewer.prreviewer.github.GitHubClientService;
+import com.pr_reviewer.prreviewer.rag.RetrievalService;
 import com.pr_reviewer.prreviewer.review.DiffCompressionService;
 import com.pr_reviewer.prreviewer.review.DiffFilterService;
 import org.springaicommunity.mcp.annotation.McpTool;
 import org.springframework.stereotype.Component;
 import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.ai.document.Document;
+import java.util.Set;
 
 import java.util.List;
+
 
 @Component
 public class PrReviewMcpTools {
@@ -18,14 +22,21 @@ public class PrReviewMcpTools {
     private final DiffCompressionService diffCompressionService;
     private static final int MAX_PATH_CHARS = 300;
     private static final int MAX_FILE_CHARS = 12_000;
+    private static final int MAX_QUERY_CHARS = 500;
+    private static final int MAX_CHUNK_CHARS = 1_500;
+    private static final int MAX_FULL_DIFF_CHARS = 80_000;
+
+    private final RetrievalService retrievalService;
 
     public PrReviewMcpTools(
             GitHubClientService gitHubClientService,
             DiffFilterService diffFilterService,
-            DiffCompressionService diffCompressionService) {
+            DiffCompressionService diffCompressionService,
+            RetrievalService retrievalService) {
         this.gitHubClientService = gitHubClientService;
         this.diffFilterService = diffFilterService;
         this.diffCompressionService = diffCompressionService;
+        this.retrievalService = retrievalService;
     }
 
     @McpTool(
@@ -44,6 +55,29 @@ public class PrReviewMcpTools {
             }
 
             String diff = diffCompressionService.buildCompressedDiff(relevantFiles);
+            return "Pull request #" + scope.prNumber() + " in " + scope.repoFullName() + ": "
+                    + relevantFiles.size() + " reviewable file(s) out of " + allFiles.size() + " changed.\n\n"
+                    + diff;
+        });
+    }
+
+    @McpTool(
+            name = "get_full_pr_diff",
+            description = "Returns the full unified diff of the pull request under review, without the small token budget of get_pr_diff. "
+                    + "Irrelevant files are removed. Very large diffs are capped at about 80,000 characters; files that do not fit are listed by name only. Takes no arguments.")
+    public String getFullPrDiff() {
+        return McpToolSupport.safely("get_full_pr_diff", () -> {
+            McpJobScope scope = McpJobScope.fromCurrentRequest();
+
+            List<FileDiff> allFiles = gitHubClientService.fetchPullRequestFiles(
+                    scope.owner(), scope.repo(), scope.prNumber(), scope.installationId());
+            List<FileDiff> relevantFiles = diffFilterService.filterRelevantFiles(allFiles);
+
+            if (relevantFiles.isEmpty()) {
+                return "No reviewable files in this pull request.";
+            }
+
+            String diff = diffCompressionService.buildFullDiff(relevantFiles, MAX_FULL_DIFF_CHARS);
             return "Pull request #" + scope.prNumber() + " in " + scope.repoFullName() + ": "
                     + relevantFiles.size() + " reviewable file(s) out of " + allFiles.size() + " changed.\n\n"
                     + diff;
@@ -78,6 +112,45 @@ public class PrReviewMcpTools {
 
         });
     }
+
+    @McpTool(
+            name = "search_codebase",
+            description = "Semantic search over the already-indexed code of this repository. "
+                    + "Returns the most relevant code chunks with their file names.")
+    public String searchCodebase(
+            @McpToolParam(description = "Natural-language description of the code or convention to look for",
+                    required = true) String query) {
+        return McpToolSupport.safely("search_codebase", () -> {
+            McpJobScope scope = McpJobScope.fromCurrentRequest();
+
+            if (query == null || query.isBlank()) {
+                return "ERROR[invalid_query]: query must not be empty.";
+            }
+
+            String trimmedQuery = query.trim();
+            if (trimmedQuery.length() > MAX_QUERY_CHARS) {
+                trimmedQuery = trimmedQuery.substring(0, MAX_QUERY_CHARS);
+            }
+
+            List<Document> documents = retrievalService.retrieveRelevantChunks(
+                    trimmedQuery, Set.of(), scope.repoFullName());
+
+            if (documents.isEmpty()) {
+                return "No indexed code found for this query.";
+            }
+
+            StringBuilder result = new StringBuilder();
+            int index = 1;
+            for (Document document : documents) {
+                Object filename = document.getMetadata().get("filename");
+                String text = document.getText() == null ? "" : document.getText();
+                result.append("### Result ").append(index++).append(": ").append(filename).append('\n')
+                        .append(truncate(text, MAX_CHUNK_CHARS)).append("\n\n");
+            }
+            return result.toString();
+        });
+    }
+
 
     private static boolean isSafePath(String path) {
         return path != null
